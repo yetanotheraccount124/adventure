@@ -6,6 +6,7 @@ export class Entity {
     public y: number;
 
     public hidden: boolean;
+    public paused: boolean;
 
     public texture: HTMLImageElement;
     public isLoaded: boolean = false;
@@ -15,6 +16,7 @@ export class Entity {
         this.y = y;
 
         this.hidden = true;
+        this.paused = false;
 
         this.texture = TextureManager.getOrCreate(textureSrc, () => {
             this.isLoaded = true;
@@ -30,7 +32,7 @@ export class Entity {
     }
 
     public update(delta: number): void {
-        if (!this.isLoaded) return;
+        if (!this.isLoaded || this.paused) return;
     }
 
     public draw(ctx: CanvasRenderingContext2D): void {

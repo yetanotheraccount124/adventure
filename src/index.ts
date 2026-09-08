@@ -11,7 +11,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
     core.addListener(Global.scene);
     core.addListener(Global.game);
-
-    core.init();
+    
     core.run();
 })

@@ -1,0 +1,31 @@
+{
+  "name": "adventure",
+  "version": "1.0.0",
+  "description": "\"# adventure\"",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yetanotheraccount124/adventure.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yetanotheraccount124/adventure/issues"
+  },
+  "homepage": "https://github.com/yetanotheraccount124/adventure#readme",
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1"
+  }
+}

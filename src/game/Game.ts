@@ -20,15 +20,15 @@ export class Game implements TickListener {
     private readonly btnMargin: number = 20;
 
     public init(): void {
-        this.bg = new StaticTexture("assets/bg.png", 0, 0);
+        this.bg = new StaticTexture("/assets/bg.png", 0, 0);
         this.bg.show();
         Global.scene.add(this.bg);
 
-        this.ground = new ScrollingGround("assets/ground.png", this.groundHeight, this.gameSpeed);
+        this.ground = new ScrollingGround("/assets/ground.png", this.groundHeight, this.gameSpeed);
         this.ground.show();
         Global.scene.add(this.ground);
 
-        this.hero = new KinematicBody("assets/hero.png", 50, 200);
+        this.hero = new KinematicBody("/assets/hero.png", 50, 200);
         this.hero.show();
         Global.scene.add(this.hero);
 
@@ -46,8 +46,8 @@ export class Game implements TickListener {
         const btnDownX = sw - this.btnSize - this.btnMargin;
         const btnDownY = sh - this.btnSize - this.btnMargin - 5;
 
-        this.btnUp = new UiButton("assets/btn-up.png", btnUpX, btnUpY, this.btnSize, this.btnSize, GameAction.UP);
-        this.btnDown = new UiButton("assets/btn-down.png", btnDownX, btnDownY, this.btnSize, this.btnSize, GameAction.DOWN);
+        this.btnUp = new UiButton("/assets/btn-up.png", btnUpX, btnUpY, this.btnSize, this.btnSize, GameAction.UP);
+        this.btnDown = new UiButton("/assets/btn-down.png", btnDownX, btnDownY, this.btnSize, this.btnSize, GameAction.DOWN);
 
         this.btnUp.show();
         this.btnDown.show();

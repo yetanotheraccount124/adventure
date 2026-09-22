@@ -108,6 +108,8 @@ export class Game implements TickListener {
         window.addEventListener("mousedown", this.onGameOverClickRef);
         window.addEventListener("touchstart", this.onGameOverClickRef);
         window.addEventListener('resize', this.handleResize.bind(this));
+
+        this.togglePause(true);
     }
 
     private createMobileButtons(): void {

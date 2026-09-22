@@ -1,9 +1,9 @@
-import type { TickListener } from "../core/TickListener.js";
 import { TextureManager } from "../core/TextureManager.js";
 
 export class Entity {
     public x: number;
     public y: number;
+    public scale: number;
 
     public hidden: boolean;
     public paused: boolean;
@@ -11,9 +11,10 @@ export class Entity {
     public texture: HTMLImageElement;
     public isLoaded: boolean = false;
 
-    constructor(textureSrc: string, x: number = 0, y: number = 0) {
+    constructor(textureSrc: string, x: number = 0, y: number = 0, scale: number = 1) {
         this.x = x;
         this.y = y;
+        this.scale = scale;
 
         this.hidden = true;
         this.paused = false;
@@ -21,6 +22,14 @@ export class Entity {
         this.texture = TextureManager.getOrCreate(textureSrc, () => {
             this.isLoaded = true;
         });
+    }
+
+    public get scaleWidth(): number {
+        return this.isLoaded ? this.texture.width * this.scale : 0;
+    }
+
+    public get scaleHeight(): number {
+        return this.isLoaded ? this.texture.height * this.scale : 0;
     }
 
     public show(): void {
@@ -37,7 +46,13 @@ export class Entity {
 
     public draw(ctx: CanvasRenderingContext2D): void {
         if (this.isLoaded && !this.hidden) {
-            ctx.drawImage(this.texture, this.x, this.y);
+            ctx.drawImage(
+                this.texture, 
+                this.x, 
+                this.y, 
+                this.texture.width * this.scale, 
+                this.texture.height * this.scale
+            );
         }
     }
 

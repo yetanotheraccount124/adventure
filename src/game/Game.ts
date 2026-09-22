@@ -29,6 +29,7 @@ export class Game implements TickListener {
         Global.scene.add(this.ground);
 
         this.hero = new KinematicBody("/assets/hero.png", 30, 200);
+        this.hero.scale = 0.8;
         this.hero.show();
         Global.scene.add(this.hero);
 

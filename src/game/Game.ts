@@ -1,24 +1,44 @@
-import type { TickListener } from "../core/TickListener.js";
-import { StaticTexture } from "../entity/StaticTexture.js";
-import { ScrollingGround } from "../entity/ScrollingGround.js";
-import { KinematicBody } from "../entity/KinematicBody.js";
-import { UiButton } from "../entity/UiButton.js";
-import { InputManager, GameAction } from "../input/InputManager.js";
-import { Global } from "../Global.js";
+import type {
+    TickListener
+} from "../core/TickListener.js";
+import {
+    StaticTexture
+} from "../entity/StaticTexture.js";
+import {
+    ScrollingGround
+} from "../entity/ScrollingGround.js";
+import {
+    KinematicBody
+} from "../entity/KinematicBody.js";
+import {
+    UiButton
+} from "../entity/UiButton.js";
+import {
+    Coin
+} from "../entity/Coin.js";
+import {
+    InputManager,
+    GameAction
+} from "../input/InputManager.js";
+import {
+    Global
+} from "../Global.js";
 
 export class Game implements TickListener {
     private bg: StaticTexture | null = null;
-    
     private clouds: StaticTexture | null = null;
     private rocks: StaticTexture | null = null;
-    
     private ground: ScrollingGround | null = null;
     private hero: KinematicBody | null = null;
-    
+
+    private coins: Coin[] = [];
+    private coinSpawnTimer: number = 0;
+    private readonly coinSpawnInterval: number = 2.0;
+    private score: number = 0;
+
     private btnUp: UiButton | null = null;
     private btnDown: UiButton | null = null;
     private btnPause: UiButton | null = null;
-
     private btnResume: UiButton | null = null;
     private btnSettings: UiButton | null = null;
 
@@ -60,6 +80,8 @@ export class Game implements TickListener {
         this.createMobileButtons();
         this.createMenuButtons();
 
+        this.hookScoreRenderer();
+
         window.addEventListener('resize', this.handleResize.bind(this));
     }
 
@@ -75,11 +97,10 @@ export class Game implements TickListener {
 
         this.btnUp = new UiButton("/assets/btn-up.png", btnUpX, btnUpY, this.btnSize, this.btnSize, GameAction.UP);
         this.btnDown = new UiButton("/assets/btn-down.png", btnDownX, btnDownY, this.btnSize, this.btnSize, GameAction.DOWN);
-        
+
         this.btnPause = new UiButton("/assets/btn-pause.png", this.btnMargin, this.btnMargin, 60, 60, null, () => {
             this.togglePause(true);
         });
-        this.btnPause.scale = 0.8;
 
         this.btnUp.show();
         this.btnDown.show();
@@ -94,7 +115,7 @@ export class Game implements TickListener {
         this.btnResume = new UiButton("/assets/btn-resume.png", 0, 0, 0, 0, null, () => {
             this.togglePause(false);
         });
-        
+
         this.btnSettings = new UiButton("/assets/btn-settings.png", 0, 0, 0, 0, null, () => {
             console.log("Settings opened");
         });
@@ -104,7 +125,7 @@ export class Game implements TickListener {
 
         Global.scene.add(this.btnResume);
         Global.scene.add(this.btnSettings);
-        
+
         this.updateMenuButtonsPositions();
     }
 
@@ -112,19 +133,23 @@ export class Game implements TickListener {
         this.isPaused = pause;
         this.menuTargetScale = pause ? 1 : 0;
 
+        for (const coin of this.coins) {
+            coin.paused = pause;
+        }
+
         if (pause) {
             this.btnResume?.show();
             this.btnSettings?.show();
             this.btnUp?.hide();
             this.btnDown?.hide();
             this.btnPause?.hide();
-            
+
             if (this.ground) this.ground.paused = true;
         } else {
             this.btnUp?.show();
             this.btnDown?.show();
             this.btnPause?.show();
-            
+
             if (this.ground) this.ground.paused = false;
         }
     }
@@ -140,6 +165,93 @@ export class Game implements TickListener {
             this.btnSettings.x = (sw - this.btnSettings.scaleWidth) / 2;
             this.btnSettings.y = (sh / 2) + 10;
         }
+    }
+
+    private spawnCoinGroup(): void {
+        const sw = window.innerWidth;
+        const sh = window.innerHeight;
+
+        const minSpawnY = 50;
+        const maxSpawnY = sh - this.groundHeight - 80;
+        const spawnY = minSpawnY + Math.random() * (maxSpawnY - minSpawnY);
+
+        const count = 3;
+        const distanceBetween = 50;
+
+        for (let i = 0; i < count; i++) {
+            const coinX = sw + (i * distanceBetween);
+            const coin = new Coin("/assets/coin.png", coinX, spawnY, this.gameSpeed);
+            coin.show();
+
+            this.coins.push(coin);
+            Global.scene.add(coin);
+        }
+    }
+
+    private checkCollisions(): void {
+        if (!this.hero) return;
+
+        const heroBounds = {
+            x: this.hero.x,
+            y: this.hero.y,
+            width: this.hero.scaleWidth || 60,
+            height: this.hero.height + 40
+        };
+
+        for (let i = this.coins.length - 1; i >= 0; i--) {
+            const coin = this.coins[i];
+            if (!coin) continue;
+
+            const coinBounds = coin.getBounds();
+
+            const isColliding =
+                heroBounds.x < coinBounds.x + coinBounds.width &&
+                heroBounds.x + heroBounds.width > coinBounds.x &&
+                heroBounds.y < coinBounds.y + coinBounds.height &&
+                heroBounds.y + heroBounds.height > coinBounds.y;
+
+            if (isColliding) {
+                this.score += 1;
+                Global.scene.remove(coin);
+                this.coins.splice(i, 1);
+                continue;
+            }
+
+            if (coin.x + coinBounds.width < 0) {
+                Global.scene.remove(coin);
+                this.coins.splice(i, 1);
+            }
+        }
+    }
+
+        private hookScoreRenderer(): void {
+        const dummyUi = {
+            x: 0, y: 0, scale: 1, hidden: false, paused: false, isLoaded: true,
+            texture: new Image(),
+            scaleWidth: 0, scaleHeight: 0,
+            init: () => {},
+            update: () => {},
+            dispose: () => {},
+            show: () => {},
+            hide: () => {},
+            draw: (ctx: CanvasRenderingContext2D) => {
+                ctx.save();
+                ctx.fillStyle = "#ffffff";
+                ctx.strokeStyle = "#000000";
+                ctx.lineWidth = 4;
+                
+                ctx.lineJoin = "round"; 
+                
+                ctx.font = "bold 28px sans-serif";
+                ctx.textAlign = "right";
+                
+                const text = `Монеты: ${this.score}`;
+                ctx.strokeText(text, ctx.canvas.width - 20, 45);
+                ctx.fillText(text, ctx.canvas.width - 20, 45);
+                ctx.restore();
+            }
+        };
+        Global.scene.add(dummyUi);
     }
 
     public invoke(delta: number): void {
@@ -165,6 +277,14 @@ export class Game implements TickListener {
             return;
         }
 
+        this.coinSpawnTimer += delta;
+        if (this.coinSpawnTimer >= this.coinSpawnInterval) {
+            this.coinSpawnTimer = 0;
+            this.spawnCoinGroup();
+        }
+
+        this.checkCollisions();
+
         const sw = window.innerWidth;
 
         if (this.bg != null) {
@@ -180,7 +300,6 @@ export class Game implements TickListener {
             if (this.clouds.x + this.clouds.scaleWidth < 0) {
                 const randomOffset = 150 + Math.random() * 500;
                 this.clouds.x = sw + randomOffset;
-                
                 this.clouds.y = 30 + Math.random() * 80;
             }
         }
@@ -223,24 +342,22 @@ export class Game implements TickListener {
     private handleResize(): void {
         const sw = window.innerWidth;
         const sh = window.innerHeight;
-
         if (this.btnUp && this.btnDown && this.btnPause) {
             this.btnUp.x = sw - this.btnSize - this.btnMargin;
             this.btnUp.y = sh - (this.btnSize * 2) - this.btnMargin - 15;
-
             this.btnDown.x = sw - this.btnSize - this.btnMargin;
             this.btnDown.y = sh - this.btnSize - this.btnMargin;
-
             this.btnPause.x = this.btnMargin;
             this.btnPause.y = this.btnMargin;
         }
-
         this.updateMenuButtonsPositions();
     }
-
     public dispose(): void {
         window.removeEventListener('resize', this.handleResize.bind(this));
-        
+        for (const coin of this.coins) {
+            Global.scene.remove(coin);
+        }
+        this.coins = [];
         if (this.bg) Global.scene.remove(this.bg);
         if (this.clouds) Global.scene.remove(this.clouds);
         if (this.rocks) Global.scene.remove(this.rocks);
@@ -251,8 +368,9 @@ export class Game implements TickListener {
         if (this.btnPause) Global.scene.remove(this.btnPause);
         if (this.btnResume) Global.scene.remove(this.btnResume);
         if (this.btnSettings) Global.scene.remove(this.btnSettings);
-        
         this.bg = null;
+        this.clouds = null;
+        this.rocks = null;
         this.ground = null;
         this.hero = null;
         this.btnUp = null;

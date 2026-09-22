@@ -28,7 +28,7 @@ export class Game implements TickListener {
         this.ground.show();
         Global.scene.add(this.ground);
 
-        this.hero = new KinematicBody("/assets/hero.png", 50, 200);
+        this.hero = new KinematicBody("/assets/hero.png", 30, 200);
         this.hero.show();
         Global.scene.add(this.hero);
 
@@ -73,15 +73,15 @@ export class Game implements TickListener {
                 this.hero.speedY = this.heroSpeed;
             }
 
-            const screenHeight = window.innerHeight - 90;
-            
-            if (this.hero.y < 0) {
+            const screenHeight = window.innerHeight - 80;
+            const maxHeroY = screenHeight - this.groundHeight - this.hero.height;
+
+            if (this.hero.y <= 0 && this.hero.speedY < 0) {
                 this.hero.y = 0;
                 this.hero.speedY = 0;
             }
 
-            const maxHeroY = screenHeight - this.groundHeight - this.hero.height;
-            if (this.hero.y > maxHeroY) {
+            if (this.hero.y >= maxHeroY && this.hero.speedY > 0) {
                 this.hero.y = maxHeroY;
                 this.hero.speedY = 0;
             }

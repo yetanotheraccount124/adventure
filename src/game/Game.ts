@@ -83,6 +83,8 @@ export class Game implements TickListener {
         this.hookScoreRenderer();
 
         window.addEventListener('resize', this.handleResize.bind(this));
+
+        this.togglePause(true);
     }
 
     private createMobileButtons(): void {

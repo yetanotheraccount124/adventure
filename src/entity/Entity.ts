@@ -11,6 +11,8 @@ export class Entity {
     public texture: HTMLImageElement;
     public isLoaded: boolean = false;
 
+    public isUi: boolean = false;
+
     constructor(textureSrc: string, x: number = 0, y: number = 0, scale: number = 1) {
         this.x = x;
         this.y = y;

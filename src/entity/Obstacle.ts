@@ -1,10 +1,10 @@
 import { Entity } from "./Entity.js";
 
-export class Coin extends Entity {
+export class Obstacle extends Entity {
     private speed: number;
 
     constructor(textureSrc: string, x: number, y: number, speed: number) {
-        super(textureSrc, x, y, 0.6); 
+        super(textureSrc, x, y, 1.0); 
         this.speed = speed;
     }
 
@@ -17,9 +17,9 @@ export class Coin extends Entity {
     public getBounds() {
         return {
             x: this.x,
-            y: this.y - 10,
+            y: this.y - 40,
             width: this.scaleWidth,
-            height: this.scaleHeight + 30
+            height: this.scaleHeight + 60
         };
     }
 }

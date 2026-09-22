@@ -22,6 +22,7 @@ export class UiButton extends Entity {
         onClick?: () => void
     ) {
         super(textureSrc, x, y);
+        this.isUi = true;
         this.fallbackWidth = fallbackWidth;
         this.fallbackHeight = fallbackHeight;
         this.action = action;

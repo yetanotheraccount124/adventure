@@ -67,7 +67,17 @@ export class Scene implements TickListener {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         for (let i = 0; i < this.entities.length; i++) {
-            this.entities[i]?.draw(this.ctx);
+            const entity = this.entities[i];
+            if (entity && !entity.isUi) {
+                entity.draw(this.ctx);
+            }
+        }
+
+        for (let i = 0; i < this.entities.length; i++) {
+            const entity = this.entities[i];
+            if (entity && entity.isUi) {
+                entity.draw(this.ctx);
+            }
         }
     }
 

@@ -8,10 +8,19 @@ import { Global } from "../Global.js";
 
 export class Game implements TickListener {
     private bg: StaticTexture | null = null;
+    
+    private clouds: StaticTexture | null = null;
+    private rocks: StaticTexture | null = null;
+    
     private ground: ScrollingGround | null = null;
     private hero: KinematicBody | null = null;
+    
     private btnUp: UiButton | null = null;
     private btnDown: UiButton | null = null;
+    private btnPause: UiButton | null = null;
+
+    private btnResume: UiButton | null = null;
+    private btnSettings: UiButton | null = null;
 
     private heroSpeed: number = 300;
     private readonly groundHeight: number = 100;
@@ -19,10 +28,25 @@ export class Game implements TickListener {
     private readonly btnSize: number = 80;
     private readonly btnMargin: number = 20;
 
+    private isPaused: boolean = false;
+    private menuTargetScale: number = 0;
+    private menuCurrentScale: number = 0;
+    private readonly menuAnimSpeed: number = 5;
+
     public init(): void {
         this.bg = new StaticTexture("/assets/bg.png", 0, 0);
         this.bg.show();
         Global.scene.add(this.bg);
+
+        const sw = window.innerWidth;
+
+        this.clouds = new StaticTexture("/assets/cloud.png", sw + 200, 50);
+        this.clouds.show();
+        Global.scene.add(this.clouds);
+
+        this.rocks = new StaticTexture("/assets/rock.png", sw + 600, 250);
+        this.rocks.show();
+        Global.scene.add(this.rocks);
 
         this.ground = new ScrollingGround("/assets/ground.png", this.groundHeight, this.gameSpeed);
         this.ground.show();
@@ -34,6 +58,8 @@ export class Game implements TickListener {
         Global.scene.add(this.hero);
 
         this.createMobileButtons();
+        this.createMenuButtons();
+
         window.addEventListener('resize', this.handleResize.bind(this));
     }
 
@@ -49,19 +75,124 @@ export class Game implements TickListener {
 
         this.btnUp = new UiButton("/assets/btn-up.png", btnUpX, btnUpY, this.btnSize, this.btnSize, GameAction.UP);
         this.btnDown = new UiButton("/assets/btn-down.png", btnDownX, btnDownY, this.btnSize, this.btnSize, GameAction.DOWN);
+        
+        this.btnPause = new UiButton("/assets/btn-pause.png", this.btnMargin, this.btnMargin, 60, 60, null, () => {
+            this.togglePause(true);
+        });
+        this.btnPause.scale = 0.8;
 
         this.btnUp.show();
         this.btnDown.show();
+        this.btnPause.show();
 
         Global.scene.add(this.btnUp);
         Global.scene.add(this.btnDown);
+        Global.scene.add(this.btnPause);
+    }
+
+    private createMenuButtons(): void {
+        this.btnResume = new UiButton("/assets/btn-resume.png", 0, 0, 0, 0, null, () => {
+            this.togglePause(false);
+        });
+        
+        this.btnSettings = new UiButton("/assets/btn-settings.png", 0, 0, 0, 0, null, () => {
+            console.log("Settings opened");
+        });
+
+        this.btnResume.scale = 0;
+        this.btnSettings.scale = 0;
+
+        Global.scene.add(this.btnResume);
+        Global.scene.add(this.btnSettings);
+        
+        this.updateMenuButtonsPositions();
+    }
+
+    private togglePause(pause: boolean): void {
+        this.isPaused = pause;
+        this.menuTargetScale = pause ? 1 : 0;
+
+        if (pause) {
+            this.btnResume?.show();
+            this.btnSettings?.show();
+            this.btnUp?.hide();
+            this.btnDown?.hide();
+            this.btnPause?.hide();
+            
+            if (this.ground) this.ground.paused = true;
+        } else {
+            this.btnUp?.show();
+            this.btnDown?.show();
+            this.btnPause?.show();
+            
+            if (this.ground) this.ground.paused = false;
+        }
+    }
+
+    private updateMenuButtonsPositions(): void {
+        const sw = window.innerWidth;
+        const sh = window.innerHeight;
+
+        if (this.btnResume && this.btnSettings) {
+            this.btnResume.x = (sw - this.btnResume.scaleWidth) / 2;
+            this.btnResume.y = (sh / 2) - this.btnResume.scaleHeight - 10;
+
+            this.btnSettings.x = (sw - this.btnSettings.scaleWidth) / 2;
+            this.btnSettings.y = (sh / 2) + 10;
+        }
     }
 
     public invoke(delta: number): void {
+        if (this.menuCurrentScale !== this.menuTargetScale) {
+            this.menuCurrentScale += (this.menuTargetScale - this.menuCurrentScale) * this.menuAnimSpeed * delta;
+            
+            if (Math.abs(this.menuCurrentScale - this.menuTargetScale) < 0.01) {
+                this.menuCurrentScale = this.menuTargetScale;
+                if (this.menuTargetScale === 0) {
+                    this.btnResume?.hide();
+                    this.btnSettings?.hide();
+                }
+            }
+
+            if (this.btnResume && this.btnSettings) {
+                this.btnResume.scale = this.menuCurrentScale;
+                this.btnSettings.scale = this.menuCurrentScale;
+                this.updateMenuButtonsPositions();
+            }
+        }
+
+        if (this.isPaused) {
+            return;
+        }
+
+        const sw = window.innerWidth;
+
         if (this.bg != null) {
-            const bgSpeed = (this.gameSpeed / 4) * delta;
+            const bgSpeed = (this.gameSpeed / 8) * delta;
             this.bg.x -= bgSpeed;
-            if (this.bg.x < -1000) this.bg.x = 0;
+            if (this.bg.x < -1000) this.bg.x = 0; 
+        }
+
+        if (this.clouds != null) {
+            const cloudsSpeed = (this.gameSpeed / 4) * delta;
+            this.clouds.x -= cloudsSpeed;
+
+            if (this.clouds.x + this.clouds.scaleWidth < 0) {
+                const randomOffset = 150 + Math.random() * 500;
+                this.clouds.x = sw + randomOffset;
+                
+                this.clouds.y = 30 + Math.random() * 80;
+            }
+        }
+
+        if (this.rocks != null) {
+            const rocksSpeed = (this.gameSpeed / 2) * delta;
+            this.rocks.x -= rocksSpeed;
+
+            if (this.rocks.x + this.rocks.scaleWidth < 0) {
+                const randomOffset = 300 + Math.random() * 600;
+                this.rocks.x = sw + randomOffset;
+            }
         }
 
         if (this.hero != null) {
@@ -90,31 +221,44 @@ export class Game implements TickListener {
     }
 
     private handleResize(): void {
-        if (this.btnUp && this.btnDown) {
-            const sw = window.innerWidth;
-            const sh = window.innerHeight;
+        const sw = window.innerWidth;
+        const sh = window.innerHeight;
 
+        if (this.btnUp && this.btnDown && this.btnPause) {
             this.btnUp.x = sw - this.btnSize - this.btnMargin;
             this.btnUp.y = sh - (this.btnSize * 2) - this.btnMargin - 15;
 
             this.btnDown.x = sw - this.btnSize - this.btnMargin;
             this.btnDown.y = sh - this.btnSize - this.btnMargin;
+
+            this.btnPause.x = this.btnMargin;
+            this.btnPause.y = this.btnMargin;
         }
+
+        this.updateMenuButtonsPositions();
     }
 
     public dispose(): void {
         window.removeEventListener('resize', this.handleResize.bind(this));
         
         if (this.bg) Global.scene.remove(this.bg);
+        if (this.clouds) Global.scene.remove(this.clouds);
+        if (this.rocks) Global.scene.remove(this.rocks);
         if (this.ground) Global.scene.remove(this.ground);
         if (this.hero) Global.scene.remove(this.hero);
         if (this.btnUp) Global.scene.remove(this.btnUp);
         if (this.btnDown) Global.scene.remove(this.btnDown);
+        if (this.btnPause) Global.scene.remove(this.btnPause);
+        if (this.btnResume) Global.scene.remove(this.btnResume);
+        if (this.btnSettings) Global.scene.remove(this.btnSettings);
         
         this.bg = null;
         this.ground = null;
         this.hero = null;
         this.btnUp = null;
         this.btnDown = null;
+        this.btnPause = null;
+        this.btnResume = null;
+        this.btnSettings = null;
     }
 }

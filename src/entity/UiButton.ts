@@ -2,42 +2,65 @@ import { Entity } from "./Entity.js";
 import { InputManager, GameAction } from "../input/InputManager.js";
 
 export class UiButton extends Entity {
-    public width: number;
-    public height: number;
-    private action: GameAction;
+    private action: GameAction | null;
+    private onClickCb?: (() => void) | undefined;
 
     private onTouchStartRef: (e: TouchEvent) => void;
     private onTouchEndRef: (e: TouchEvent) => void;
+    private onMouseDownRef: (e: MouseEvent) => void;
 
-    constructor(textureSrc: string, x: number, y: number, width: number, height: number, action: GameAction) {
+    private fallbackWidth: number;
+    private fallbackHeight: number;
+
+    constructor(
+        textureSrc: string, 
+        x: number, 
+        y: number, 
+        fallbackWidth: number, 
+        fallbackHeight: number, 
+        action: GameAction | null = null, 
+        onClick?: () => void
+    ) {
         super(textureSrc, x, y);
-        this.width = width;
-        this.height = height;
+        this.fallbackWidth = fallbackWidth;
+        this.fallbackHeight = fallbackHeight;
         this.action = action;
+        this.onClickCb = onClick;
 
         this.onTouchStartRef = (e) => this.handleTouchStart(e);
         this.onTouchEndRef = (e) => this.handleTouchEnd(e);
+        this.onMouseDownRef = (e) => this.handleMouseDown(e);
 
         window.addEventListener("touchstart", this.onTouchStartRef, { passive: false });
         window.addEventListener("touchend", this.onTouchEndRef, { passive: false });
+        window.addEventListener("mousedown", this.onMouseDownRef);
     }
 
-    private isTouchInside(touchX: number, touchY: number): boolean {
+    public get width(): number {
+        return this.isLoaded ? this.scaleWidth : this.fallbackWidth * this.scale;
+    }
+
+    public get height(): number {
+        return this.isLoaded ? this.scaleHeight : this.fallbackHeight * this.scale;
+    }
+
+    private isPointInside(px: number, py: number): boolean {
         return (
-            touchX >= this.x &&
-            touchX <= this.x + this.width &&
-            touchY >= this.y &&
-            touchY <= this.y + this.height
+            px >= this.x &&
+            px <= this.x + this.width &&
+            py >= this.y &&
+            py <= this.y + this.height
         );
     }
 
     private handleTouchStart(e: TouchEvent): void {
-        if (this.hidden || this.paused) return;
+        if (this.hidden) return;
 
         for (let i = 0; i < e.touches.length; i++) {
             const touch = e.touches[i];
-            if (touch != undefined && this.isTouchInside(touch.clientX, touch.clientY)) {
-                InputManager.triggerVirtualAction(this.action, true);
+            if (touch != undefined && this.isPointInside(touch.clientX, touch.clientY)) {
+                if (this.action !== null) InputManager.triggerVirtualAction(this.action, true);
+                if (this.onClickCb) this.onClickCb();
                 e.preventDefault();
                 break;
             }
@@ -45,31 +68,39 @@ export class UiButton extends Entity {
     }
 
     private handleTouchEnd(e: TouchEvent): void {
-        if (this.hidden || this.paused) return;
+        if (this.hidden) return;
 
         let stillPressed = false;
         for (let i = 0; i < e.touches.length; i++) {
             const touch = e.touches[i];
-            if (touch != undefined && this.isTouchInside(touch.clientX, touch.clientY)) {
+            if (touch != undefined && this.isPointInside(touch.clientX, touch.clientY)) {
                 stillPressed = true;
                 break;
             }
         }
 
-        if (!stillPressed) {
+        if (!stillPressed && this.action !== null) {
             InputManager.triggerVirtualAction(this.action, false);
+        }
+    }
+
+    private handleMouseDown(e: MouseEvent): void {
+        if (this.hidden) return;
+        if (this.isPointInside(e.clientX, e.clientY)) {
+            if (this.onClickCb) this.onClickCb();
         }
     }
 
     public override draw(ctx: CanvasRenderingContext2D): void {
         if (this.isLoaded && !this.hidden) {
-            ctx.drawImage(this.texture, this.x, this.y, this.width, this.height);
+            super.draw(ctx);
         }
     }
 
     public override dispose(): void {
         window.removeEventListener("touchstart", this.onTouchStartRef);
         window.removeEventListener("touchend", this.onTouchEndRef);
+        window.removeEventListener("mousedown", this.onMouseDownRef);
         super.dispose();
     }
 }

@@ -34,10 +34,13 @@ export class Game implements TickListener {
     private ground: ScrollingGround | null = null;
     private hero: KinematicBody | null = null;
 
+    // Возвращаем coinBg как StaticTexture
+    private coinBg: StaticTexture | null = null;
+
     // Списки ассетов для смены окружения
     private readonly bgTextures: string[] = ["/assets/bg.png", "/assets/bg-2.png", "/assets/bg-3.jpg", "/assets/bg-4.jpg", "/assets/bg-5.jpg"];
     private readonly rockTextures: string[] = ["/assets/rock.png", "/assets/rock-2.png"];
-    private readonly obstacleTextures: string[] = ["/assets/obs1.png", "/assets/obs2.png"]; // Список препятствий
+    private readonly obstacleTextures: string[] = ["/assets/obs1.png", "/assets/obs2.png"];
     private readonly cloudTextures: string[] = ["/assets/cloud.png", "/assets/cloud-2.png"];
     private currentBgIndex: number = 0;
 
@@ -92,7 +95,7 @@ export class Game implements TickListener {
     }
 
     public init(): void {
-        this.bg = new StaticTexture(this.bgTextures[this.currentBgIndex]!, 0, 0);
+        this.bg = new StaticTexture(this.bgTextures[this.currentBgIndex] !, 0, 0);
         this.bg.show();
         Global.scene.add(this.bg);
 
@@ -101,8 +104,7 @@ export class Game implements TickListener {
         this.clouds = new StaticTexture(this.getRandomTexture(this.cloudTextures), sw + 200, 50);
         this.clouds.show();
         Global.scene.add(this.clouds);
-
-        // Случайная скала при самом первом запуске
+        
         this.rocks = new StaticTexture(this.getRandomTexture(this.rockTextures), sw + 600, 400);
         this.rocks.show();
         Global.scene.add(this.rocks);
@@ -115,6 +117,12 @@ export class Game implements TickListener {
         this.hero.scale = 0.8;
         this.hero.show();
         Global.scene.add(this.hero);
+
+        // Инициализируем плашку в правом верхнем углу. Ставим флаг isUi = true, чтобы она рендерилась поверх игрового мира.
+        this.coinBg = new StaticTexture("/assets/coin-bg.png", sw - 210, 5, 0.25);
+        this.coinBg.isUi = true;
+        this.coinBg.hide();
+        Global.scene.add(this.coinBg);
 
         this.createMobileButtons();
         this.createMenuButtons();
@@ -257,23 +265,21 @@ export class Game implements TickListener {
         }
     }
 
-    // Универсальный метод для получения случайного элемента из массива строк
     private getRandomTexture(list: string[]): string {
         const randomIndex = Math.floor(Math.random() * list.length);
-        return list[randomIndex]!;
+        return list[randomIndex] !;
     }
 
-    // Этот метод теперь срабатывает ТОЛЬКО один раз при проигрыше
     private changeEnvironmentOnDeath(): void {
         this.currentBgIndex = (this.currentBgIndex + 1) % this.bgTextures.length;
         if (this.bg) {
-            this.bg.texture.src = this.bgTextures[this.currentBgIndex]!;
+            this.bg.texture.src = this.bgTextures[this.currentBgIndex] !;
         }
 
         if (this.rocks) {
             this.rocks.texture.src = this.getRandomTexture(this.rockTextures);
         }
-        
+
         if (this.clouds) {
             this.clouds.texture.src = this.getRandomTexture(this.cloudTextures);
         }
@@ -299,16 +305,12 @@ export class Game implements TickListener {
             Global.scene.add(coin);
         }
     }
-
     private spawnObstacle(): void {
         const sw = window.innerWidth;
         const sh = window.innerHeight;
-
         const minSpawnY = 50;
         const maxSpawnY = sh - this.groundHeight - 90;
         const spawnY = minSpawnY + Math.random() * (maxSpawnY - minSpawnY);
-
-        // Берем СЛУЧАЙНУЮ текстуру препятствия из списка при каждом новом спавне
         const randomObstacleTexture = this.getRandomTexture(this.obstacleTextures);
         const obstacle = new Obstacle(randomObstacleTexture, sw + 100, spawnY, this.gameSpeed);
         obstacle.show();
@@ -365,7 +367,6 @@ export class Game implements TickListener {
     private triggerDeath(): void {
         this.isDead = true;
         this.flashAlpha = 1.0;
-        // ВЫЗОВ: Меняем фон и скалы ровно ОДИН раз в момент столкновения
         this.changeEnvironmentOnDeath();
         if (this.ground) this.ground.paused = true;
         for (const coin of this.coins) coin.paused = true;
@@ -422,6 +423,7 @@ export class Game implements TickListener {
             hide: () => {},
             draw: (ctx: CanvasRenderingContext2D) => {
                 ctx.save();
+                // Отрисовка текста поверх плашки StaticTexture
                 ctx.lineJoin = "round";
                 ctx.fillStyle = "#ffffff";
                 ctx.strokeStyle = "#000000";
@@ -431,8 +433,9 @@ export class Game implements TickListener {
                 const scoreText = `Монеты: ${
                     this.score
                 }`;
-                ctx.strokeText(scoreText, ctx.canvas.width - 20, 45);
-                ctx.fillText(scoreText, ctx.canvas.width - 20, 45);
+                // Выравниваем по правому краю, отнимая отступ
+                ctx.strokeText(scoreText, ctx.canvas.width - 35, 48);
+                ctx.fillText(scoreText, ctx.canvas.width - 35, 48);
                 if (this.flashAlpha > 0) {
                     ctx.fillStyle = `rgba(255, 255, 255, ${
                         this.flashAlpha
@@ -520,6 +523,15 @@ export class Game implements TickListener {
         if (this.isPaused) {
             return;
         }
+        // Привязываем x-координату плашки к правому краю экрана в каждом кадре
+        if (this.coinBg && this.coinBg.isLoaded) {
+            this.coinBg.show();
+            // Если у вашей картинки фиксированная ширина (например, 200px),
+            // используем её для расчета точного отступа:
+            const width = this.coinBg.scaleWidth || 200;
+            this.coinBg.x = window.innerWidth - width;
+            this.coinBg.y = 0;
+        }
         this.coinSpawnTimer += delta;
         if (this.coinSpawnTimer >= this.coinSpawnInterval) {
             this.coinSpawnTimer = 0;
@@ -552,7 +564,6 @@ export class Game implements TickListener {
             if (this.rocks.x + this.rocks.scaleWidth < 0) {
                 const randomOffset = 300 + Math.random() * 600;
                 this.rocks.x = sw + randomOffset;
-                // Также меняем спрайт скалы на случайный, когда старая уходит за экран
                 this.rocks.texture.src = this.getRandomTexture(this.rockTextures);
             }
         }
@@ -610,6 +621,7 @@ export class Game implements TickListener {
         if (this.btnSettings) Global.scene.remove(this.btnSettings);
         if (this.btnBack) Global.scene.remove(this.btnBack);
         if (this.btnSound) Global.scene.remove(this.btnSound);
+        if (this.coinBg) Global.scene.remove(this.coinBg);
         this.bg = null;
         this.clouds = null;
         this.rocks = null;
@@ -622,5 +634,6 @@ export class Game implements TickListener {
         this.btnSettings = null;
         this.btnBack = null;
         this.btnSound = null;
+        this.coinBg = null;
     }
 }

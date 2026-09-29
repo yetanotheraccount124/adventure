@@ -1,1 +1,0 @@
-{"version":3,"file":"TextureManager.d.ts","sourceRoot":"","sources":["TextureManager.ts"],"names":[],"mappings":"AAAA,qBAAa,cAAc;IACvB,OAAO,CAAC,MAAM,CAAC,KAAK,CAA4C;IAEhE,OAAc,WAAW,CAAC,GAAG,EAAE,MAAM,EAAE,QAAQ,CAAC,EAAE,MAAM,IAAI,GAAG,gBAAgB,CAqB9E;IAED,OAAc,KAAK,IAAI,IAAI,CAE1B;CACJ"}

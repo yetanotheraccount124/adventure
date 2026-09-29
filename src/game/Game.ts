@@ -34,6 +34,13 @@ export class Game implements TickListener {
     private ground: ScrollingGround | null = null;
     private hero: KinematicBody | null = null;
 
+    // Списки ассетов для смены окружения
+    private readonly bgTextures: string[] = ["/assets/bg.png", "/assets/bg-2.png", "/assets/bg-3.jpg", "/assets/bg-4.jpg", "/assets/bg-5.jpg"];
+    private readonly rockTextures: string[] = ["/assets/rock.png", "/assets/rock-2.png"];
+    private readonly obstacleTextures: string[] = ["/assets/obs1.png", "/assets/obs2.png"]; // Список препятствий
+    private readonly cloudTextures: string[] = ["/assets/cloud.png", "/assets/cloud-2.png"];
+    private currentBgIndex: number = 0;
+
     private coins: Coin[] = [];
     private coinSpawnTimer: number = 0;
     private readonly coinSpawnInterval: number = 2.0;
@@ -51,8 +58,16 @@ export class Game implements TickListener {
     private btnUp: UiButton | null = null;
     private btnDown: UiButton | null = null;
     private btnPause: UiButton | null = null;
+
+    // Главное меню паузы
     private btnResume: UiButton | null = null;
     private btnSettings: UiButton | null = null;
+
+    // Подменю настроек
+    private btnBack: UiButton | null = null;
+    private btnSound: UiButton | null = null;
+    private isSoundOn: boolean = true;
+    private isInSettingsSubmenu: boolean = false;
 
     private heroSpeed: number = 300;
     private readonly groundHeight: number = 100;
@@ -77,17 +92,18 @@ export class Game implements TickListener {
     }
 
     public init(): void {
-        this.bg = new StaticTexture("/assets/bg.png", 0, 0);
+        this.bg = new StaticTexture(this.bgTextures[this.currentBgIndex]!, 0, 0);
         this.bg.show();
         Global.scene.add(this.bg);
 
         const sw = window.innerWidth;
 
-        this.clouds = new StaticTexture("/assets/cloud.png", sw + 200, 50);
+        this.clouds = new StaticTexture(this.getRandomTexture(this.cloudTextures), sw + 200, 50);
         this.clouds.show();
         Global.scene.add(this.clouds);
 
-        this.rocks = new StaticTexture("/assets/rock.png", sw + 600, 250);
+        // Случайная скала при самом первом запуске
+        this.rocks = new StaticTexture(this.getRandomTexture(this.rockTextures), sw + 600, 400);
         this.rocks.show();
         Global.scene.add(this.rocks);
 
@@ -143,15 +159,48 @@ export class Game implements TickListener {
             this.togglePause(false);
         });
 
-        this.btnSettings = new UiButton("/assets/btn-settings.png", 0, 0, 0, 0, null, () => {});
+        this.btnSettings = new UiButton("/assets/btn-settings.png", 0, 0, 0, 0, null, () => {
+            this.openSettingsSubmenu(true);
+        });
+
+        this.btnBack = new UiButton("/assets/btn-back.png", 0, 0, 0, 0, null, () => {
+            this.openSettingsSubmenu(false);
+        });
+
+        this.btnSound = new UiButton("/assets/btn-mute.png", 0, 0, 0, 0, null, () => {
+            this.toggleSound();
+        });
 
         this.btnResume.scale = 0;
         this.btnSettings.scale = 0;
+        this.btnBack.scale = 0;
+        this.btnSound.scale = 0;
 
         Global.scene.add(this.btnResume);
         Global.scene.add(this.btnSettings);
+        Global.scene.add(this.btnBack);
+        Global.scene.add(this.btnSound);
 
         this.updateMenuButtonsPositions();
+    }
+
+    private openSettingsSubmenu(open: boolean): void {
+        this.isInSettingsSubmenu = open;
+
+        if (open) {
+            this.btnBack?.show();
+            this.btnSound?.show();
+        } else {
+            this.btnResume?.show();
+            this.btnSettings?.show();
+        }
+    }
+
+    private toggleSound(): void {
+        this.isSoundOn = !this.isSoundOn;
+        if (this.btnSound) {
+            this.btnSound.texture.src = this.isSoundOn ? "/assets/btn-mute.png" : "/assets/btn-unmute.png";
+        }
     }
 
     private togglePause(pause: boolean): void {
@@ -164,6 +213,7 @@ export class Game implements TickListener {
         for (const obs of this.obstacles) obs.paused = pause;
 
         if (pause) {
+            this.openSettingsSubmenu(false);
             this.btnResume?.show();
             this.btnSettings?.show();
             this.btnUp?.hide();
@@ -172,6 +222,12 @@ export class Game implements TickListener {
 
             if (this.ground) this.ground.paused = true;
         } else {
+            this.isInSettingsSubmenu = false;
+            this.btnResume?.hide();
+            this.btnSettings?.hide();
+            this.btnBack?.hide();
+            this.btnSound?.hide();
+
             this.btnUp?.show();
             this.btnDown?.show();
             this.btnPause?.show();
@@ -190,6 +246,36 @@ export class Game implements TickListener {
 
             this.btnSettings.x = (sw - this.btnSettings.scaleWidth) / 2;
             this.btnSettings.y = (sh / 2) + 10;
+        }
+
+        if (this.btnSound && this.btnBack) {
+            this.btnSound.x = (sw - this.btnSound.scaleWidth) / 2;
+            this.btnSound.y = (sh / 2) - this.btnSound.scaleHeight - 10;
+
+            this.btnBack.x = (sw - this.btnBack.scaleWidth) / 2;
+            this.btnBack.y = (sh / 2) + 10;
+        }
+    }
+
+    // Универсальный метод для получения случайного элемента из массива строк
+    private getRandomTexture(list: string[]): string {
+        const randomIndex = Math.floor(Math.random() * list.length);
+        return list[randomIndex]!;
+    }
+
+    // Этот метод теперь срабатывает ТОЛЬКО один раз при проигрыше
+    private changeEnvironmentOnDeath(): void {
+        this.currentBgIndex = (this.currentBgIndex + 1) % this.bgTextures.length;
+        if (this.bg) {
+            this.bg.texture.src = this.bgTextures[this.currentBgIndex]!;
+        }
+
+        if (this.rocks) {
+            this.rocks.texture.src = this.getRandomTexture(this.rockTextures);
+        }
+        
+        if (this.clouds) {
+            this.clouds.texture.src = this.getRandomTexture(this.cloudTextures);
         }
     }
 
@@ -222,104 +308,88 @@ export class Game implements TickListener {
         const maxSpawnY = sh - this.groundHeight - 90;
         const spawnY = minSpawnY + Math.random() * (maxSpawnY - minSpawnY);
 
-        const obstacle = new Obstacle("/assets/obs1.png", sw + 100, spawnY, this.gameSpeed);
+        // Берем СЛУЧАЙНУЮ текстуру препятствия из списка при каждом новом спавне
+        const randomObstacleTexture = this.getRandomTexture(this.obstacleTextures);
+        const obstacle = new Obstacle(randomObstacleTexture, sw + 100, spawnY, this.gameSpeed);
         obstacle.show();
-
         this.obstacles.push(obstacle);
         Global.scene.add(obstacle);
     }
-
     private checkCollisions(): void {
         if (!this.hero || this.isDead || this.isGameOver) return;
-
         const heroBounds = {
             x: this.hero.x,
             y: this.hero.y,
             width: this.hero.scaleWidth || 60,
             height: this.hero.height
         };
-
         for (let i = this.coins.length - 1; i >= 0; i--) {
             const coin = this.coins[i];
             if (!coin) continue;
-
             const coinBounds = coin.getBounds();
             const isColliding =
                 heroBounds.x < coinBounds.x + coinBounds.width &&
                 heroBounds.x + heroBounds.width > coinBounds.x &&
                 heroBounds.y < coinBounds.y + coinBounds.height &&
                 heroBounds.y + heroBounds.height > coinBounds.y;
-
             if (isColliding) {
                 this.score += 1;
                 Global.scene.remove(coin);
                 this.coins.splice(i, 1);
                 continue;
             }
-
             if (coin.x + coinBounds.width < 0) {
                 Global.scene.remove(coin);
                 this.coins.splice(i, 1);
             }
         }
-
         for (let i = this.obstacles.length - 1; i >= 0; i--) {
             const obs = this.obstacles[i];
             if (!obs) continue;
-
             const obsBounds = obs.getBounds();
             const isCollidingWithObstacle =
                 heroBounds.x < obsBounds.x + obsBounds.width &&
                 heroBounds.x + heroBounds.width > obsBounds.x &&
                 heroBounds.y < obsBounds.y + obsBounds.height &&
                 heroBounds.y + heroBounds.height > obsBounds.y;
-
             if (isCollidingWithObstacle) {
                 this.triggerDeath();
                 break;
             }
-
             if (obs.x + obsBounds.width < 0) {
                 Global.scene.remove(obs);
                 this.obstacles.splice(i, 1);
             }
         }
     }
-
     private triggerDeath(): void {
         this.isDead = true;
         this.flashAlpha = 1.0;
-
+        // ВЫЗОВ: Меняем фон и скалы ровно ОДИН раз в момент столкновения
+        this.changeEnvironmentOnDeath();
         if (this.ground) this.ground.paused = true;
         for (const coin of this.coins) coin.paused = true;
         for (const obs of this.obstacles) obs.paused = true;
-
         this.btnUp?.hide();
         this.btnDown?.hide();
         this.btnPause?.hide();
-
         if (this.hero) {
             this.hero.speedY = -150;
             this.hero.gravity = 900;
         }
     }
-
     private resetGame(): void {
         for (const coin of this.coins) Global.scene.remove(coin);
         this.coins = [];
-
         for (const obs of this.obstacles) Global.scene.remove(obs);
         this.obstacles = [];
-
         this.score = 0;
         this.coinSpawnTimer = 0;
         this.obstacleSpawnTimer = 0;
         this.isDead = false;
         this.isGameOver = false;
         this.flashAlpha = 0;
-
         InputManager.triggerVirtualAction(GameAction.UP, false);
-
         if (this.hero) {
             this.hero.x = 30;
             this.hero.y = 200;
@@ -328,7 +398,6 @@ export class Game implements TickListener {
             this.hero.accelX = 0;
             this.hero.accelY = 0;
         }
-
         if (this.ground) this.ground.paused = false;
         this.btnUp?.show();
         this.btnDown?.show();
@@ -359,11 +428,15 @@ export class Game implements TickListener {
                 ctx.lineWidth = 4;
                 ctx.font = "bold 28px sans-serif";
                 ctx.textAlign = "right";
-                const scoreText = `Монеты: ${this.score}`;
+                const scoreText = `Монеты: ${
+                    this.score
+                }`;
                 ctx.strokeText(scoreText, ctx.canvas.width - 20, 45);
                 ctx.fillText(scoreText, ctx.canvas.width - 20, 45);
                 if (this.flashAlpha > 0) {
-                    ctx.fillStyle = `rgba(255, 255, 255, ${this.flashAlpha})`;
+                    ctx.fillStyle = `rgba(255, 255, 255, ${
+                        this.flashAlpha
+                    })`;
                     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
                 }
                 if (this.isGameOver) {
@@ -371,19 +444,16 @@ export class Game implements TickListener {
                     const cy = ctx.canvas.height / 2;
                     ctx.textAlign = "center";
                     ctx.strokeStyle = "#000000";
-
                     ctx.fillStyle = "#ff3333";
                     ctx.font = "bold 32px sans-serif";
                     ctx.lineWidth = 6;
                     ctx.strokeText("ИГРА ОКОНЧЕНА", cx, cy - 20);
                     ctx.fillText("ИГРА ОКОНЧЕНА", cx, cy - 20);
-
                     ctx.fillStyle = "#ffffff";
                     ctx.font = "24px sans-serif";
                     ctx.lineWidth = 4;
                     ctx.strokeText("Нажмите ВВЕРХ", cx, cy + 30);
                     ctx.fillText("Нажмите ВВЕРХ", cx, cy + 30);
-
                     ctx.font = "18px sans-serif";
                     ctx.strokeText("или кликните для рестарта", cx, cy + 60);
                     ctx.fillText("или кликните для рестарта", cx, cy + 60);
@@ -405,13 +475,24 @@ export class Game implements TickListener {
                 if (this.menuTargetScale === 0) {
                     this.btnResume?.hide();
                     this.btnSettings?.hide();
+                    this.btnBack?.hide();
+                    this.btnSound?.hide();
                 }
             }
-            if (this.btnResume && this.btnSettings) {
-                this.btnResume.scale = this.menuCurrentScale;
-                this.btnSettings.scale = this.menuCurrentScale;
-                this.updateMenuButtonsPositions();
+        }
+        if (this.btnResume && this.btnSettings && this.btnBack && this.btnSound) {
+            this.btnResume.scale = this.isInSettingsSubmenu ? 0 : this.menuCurrentScale;
+            this.btnSettings.scale = this.isInSettingsSubmenu ? 0 : this.menuCurrentScale;
+            this.btnSound.scale = this.isInSettingsSubmenu ? this.menuCurrentScale : 0;
+            this.btnBack.scale = this.isInSettingsSubmenu ? this.menuCurrentScale : 0;
+            if (this.isInSettingsSubmenu) {
+                this.btnResume.hide();
+                this.btnSettings.hide();
+            } else if (this.menuTargetScale !== 0) {
+                this.btnBack.hide();
+                this.btnSound.hide();
             }
+            this.updateMenuButtonsPositions();
         }
         if (this.isDead && !this.isGameOver) {
             if (this.hero) {
@@ -422,16 +503,13 @@ export class Game implements TickListener {
                     this.hero.y = maxHeroY;
                     this.hero.stop();
                     this.isGameOver = true;
-                    
-                    this.restartDelayTimer = 0; 
+                    this.restartDelayTimer = 0;
                 }
             }
             return;
         }
-
         if (this.isGameOver) {
             this.restartDelayTimer += delta;
-
             if (this.restartDelayTimer >= 2.0) {
                 if (InputManager.isPressed(GameAction.UP)) {
                     this.resetGame();
@@ -474,6 +552,8 @@ export class Game implements TickListener {
             if (this.rocks.x + this.rocks.scaleWidth < 0) {
                 const randomOffset = 300 + Math.random() * 600;
                 this.rocks.x = sw + randomOffset;
+                // Также меняем спрайт скалы на случайный, когда старая уходит за экран
+                this.rocks.texture.src = this.getRandomTexture(this.rockTextures);
             }
         }
         if (this.hero != null) {
@@ -528,6 +608,8 @@ export class Game implements TickListener {
         if (this.btnPause) Global.scene.remove(this.btnPause);
         if (this.btnResume) Global.scene.remove(this.btnResume);
         if (this.btnSettings) Global.scene.remove(this.btnSettings);
+        if (this.btnBack) Global.scene.remove(this.btnBack);
+        if (this.btnSound) Global.scene.remove(this.btnSound);
         this.bg = null;
         this.clouds = null;
         this.rocks = null;
@@ -538,5 +620,7 @@ export class Game implements TickListener {
         this.btnPause = null;
         this.btnResume = null;
         this.btnSettings = null;
+        this.btnBack = null;
+        this.btnSound = null;
     }
 }

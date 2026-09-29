@@ -38,8 +38,10 @@ export class Game implements TickListener {
     private coinBg: StaticTexture | null = null;
 
     // Списки ассетов для смены окружения
-    private readonly bgTextures: string[] = ["/assets/bg.png", "/assets/bg-2.png", "/assets/bg-3.jpg", "/assets/bg-4.jpg", "/assets/bg-5.jpg"];
-    private readonly rockTextures: string[] = ["/assets/rock.png", "/assets/rock-2.png"];
+    private readonly bgTextures: string[] = ["/assets/bg.png", "/assets/bg-2.png",
+        "/assets/bg-3.jpg", "/assets/bg-4.jpg", "/assets/bg-5.jpg",
+        "/assets/bg-6.png", "/assets/bg-7.png"];
+    private readonly rockTextures: string[] = ["/assets/rock.png", "/assets/rock-2.png", "/assets/rock-3.png"];
     private readonly obstacleTextures: string[] = ["/assets/obs1.png", "/assets/obs2.png"];
     private readonly cloudTextures: string[] = ["/assets/cloud.png", "/assets/cloud-2.png"];
     private currentBgIndex: number = 0;

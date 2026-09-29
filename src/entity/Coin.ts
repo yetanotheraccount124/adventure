@@ -17,7 +17,7 @@ export class Coin extends Entity {
     public getBounds() {
         return {
             x: this.x,
-            y: this.y - 10,
+            y: this.y - 60,
             width: this.scaleWidth,
             height: this.scaleHeight + 30
         };

@@ -3,7 +3,7 @@ import { Entity } from "./Entity.js";
 export class ScrollingGround extends Entity {
     private pattern: CanvasPattern | null = null;
     private height: number;
-    private speed: number;
+    public speed: number;
 
     constructor(textureSrc: string, height: number = 100, speed: number = 150) {
         super(textureSrc, 0, 0);

@@ -27,6 +27,52 @@ import {
     Global
 } from "../Global.js";
 
+export enum BoostType {
+    MAGNET = "MAGNET",
+    INVINCIBILITY = "INVINCIBILITY",
+    SPEED = "SPEED"
+}
+
+export class Boost {
+    public texture: StaticTexture;
+    public type: BoostType;
+    public x: number;
+    public y: number;
+    public speedX: number;
+    public width: number = 40;
+    public height: number = 40;
+    public paused: boolean = false;
+
+    constructor(textureSrc: string, x: number, y: number, speedX: number, type: BoostType) {
+        this.type = type;
+        this.x = x;
+        this.y = y;
+        this.speedX = speedX;
+        this.texture = new StaticTexture(textureSrc, x, y);
+        this.texture.scale = 0.15; // Предполагаем уменьшение размера, чтобы вписывалось в UI
+    }
+
+    public show(): void {
+        this.texture.show();
+    }
+
+    public update(delta: number, currentSpeed: number): void {
+        if (this.paused) return;
+        this.x -= currentSpeed * delta;
+        this.texture.x = this.x;
+        this.texture.y = this.y;
+    }
+
+    public getBounds() {
+        return {
+            x: this.x,
+            y: this.y,
+            width: this.width,
+            height: this.height
+        };
+    }
+}
+
 export class Game implements TickListener {
     private bg: StaticTexture | null = null;
     private clouds: StaticTexture | null = null;
@@ -34,10 +80,8 @@ export class Game implements TickListener {
     private ground: ScrollingGround | null = null;
     private hero: KinematicBody | null = null;
 
-    // Возвращаем coinBg как StaticTexture
     private coinBg: StaticTexture | null = null;
 
-    // Списки ассетов для смены окружения
     private readonly bgTextures: string[] = ["/assets/bg.png", "/assets/bg-2.png",
         "/assets/bg-3.jpg", "/assets/bg-4.jpg", "/assets/bg-5.jpg",
         "/assets/bg-6.png", "/assets/bg-7.png"];
@@ -55,6 +99,20 @@ export class Game implements TickListener {
     private obstacleSpawnTimer: number = 0;
     private readonly obstacleSpawnInterval: number = 2.5;
 
+    // Свойства для системы бустов
+    private boosts: Boost[] = [];
+    private boostSpawnTimer: number = 0;
+    private readonly boostSpawnInterval: number = 4.0; // Спавнятся чаще (4 секунды)
+    private lastCoinSpawnY: number = 200; // Для отслеживания перекрытия по Y
+
+    // Состояния активных бустов (значение > 0 означает, что буст активен и показывает оставшееся время в сек)
+    private activeBoosts: Record<BoostType, number> = {
+        [BoostType.MAGNET]: 0,
+        [BoostType.INVINCIBILITY]: 0,
+        [BoostType.SPEED]: 0
+    };
+    private readonly boostDuration: number = 5.0;
+
     private isPaused: boolean = false;
     private isDead: boolean = false;
     private isGameOver: boolean = false;
@@ -64,19 +122,26 @@ export class Game implements TickListener {
     private btnDown: UiButton | null = null;
     private btnPause: UiButton | null = null;
 
-    // Главное меню паузы
     private btnResume: UiButton | null = null;
     private btnSettings: UiButton | null = null;
 
-    // Подменю настроек
     private btnBack: UiButton | null = null;
     private btnSound: UiButton | null = null;
     private isSoundOn: boolean = true;
     private isInSettingsSubmenu: boolean = false;
 
-    private heroSpeed: number = 300;
+    // Аудиосистема
+    private bgMusic: HTMLAudioElement | null = null;
+    private readonly musicTracks: string[] = [
+        "/assets/sounds/1.mp3",
+        "/assets/sounds/2.mp3",
+        "/assets/sounds/3.mp3",
+        "/assets/sounds/4.mp3"
+    ];
+
+    private heroBaseSpeed: number = 200;
     private readonly groundHeight: number = 100;
-    private gameSpeed: number = 200;
+    private baseGameSpeed: number = 120;
     private readonly btnSize: number = 80;
     private readonly btnMargin: number = 20;
 
@@ -96,6 +161,15 @@ export class Game implements TickListener {
         };
     }
 
+    // Геттеры для динамического подсчета текущей скорости с учетом буста SPEED
+    private get gameSpeed(): number {
+        return this.activeBoosts[BoostType.SPEED] > 0 ? this.baseGameSpeed * 1.75 : this.baseGameSpeed;
+    }
+
+    private get heroSpeed(): number {
+        return this.activeBoosts[BoostType.SPEED] > 0 ? this.heroBaseSpeed * 1.5 : this.heroBaseSpeed;
+    }
+
     public init(): void {
         this.bg = new StaticTexture(this.bgTextures[this.currentBgIndex] !, 0, 0);
         this.bg.show();
@@ -111,7 +185,7 @@ export class Game implements TickListener {
         this.rocks.show();
         Global.scene.add(this.rocks);
 
-        this.ground = new ScrollingGround("/assets/ground.png", this.groundHeight, this.gameSpeed);
+        this.ground = new ScrollingGround("/assets/ground.png", this.groundHeight, this.baseGameSpeed);
         this.ground.show();
         Global.scene.add(this.ground);
 
@@ -120,7 +194,6 @@ export class Game implements TickListener {
         this.hero.show();
         Global.scene.add(this.hero);
 
-        // Инициализируем плашку в правом верхнем углу. Ставим флаг isUi = true, чтобы она рендерилась поверх игрового мира.
         this.coinBg = new StaticTexture("/assets/coin-bg.png", sw - 210, 5, 0.25);
         this.coinBg.isUi = true;
         this.coinBg.hide();
@@ -135,7 +208,21 @@ export class Game implements TickListener {
         window.addEventListener("touchstart", this.onGameOverClickRef);
         window.addEventListener('resize', this.handleResize.bind(this));
 
+        this.playRandomMusic();
+
         this.togglePause(true);
+    }
+
+    private playRandomMusic(): void {
+        const randomTrack = this.getRandomTexture(this.musicTracks);
+        this.bgMusic = new Audio(randomTrack);
+        this.bgMusic.loop = true;
+        
+        if (this.isSoundOn) {
+            this.bgMusic.play().catch(err => {
+                console.log("Автоплей музыки заблокирован браузером.", err);
+            });
+        }
     }
 
     private createMobileButtons(): void {
@@ -211,6 +298,14 @@ export class Game implements TickListener {
         if (this.btnSound) {
             this.btnSound.texture.src = this.isSoundOn ? "/assets/btn-mute.png" : "/assets/btn-unmute.png";
         }
+
+        if (this.bgMusic) {
+            if (this.isSoundOn) {
+                this.bgMusic.play().catch(() => {});
+            } else {
+                this.bgMusic.pause();
+            }
+        }
     }
 
     private togglePause(pause: boolean): void {
@@ -221,6 +316,7 @@ export class Game implements TickListener {
 
         for (const coin of this.coins) coin.paused = pause;
         for (const obs of this.obstacles) obs.paused = pause;
+        for (const boost of this.boosts) boost.paused = pause;
 
         if (pause) {
             this.openSettingsSubmenu(false);
@@ -232,6 +328,10 @@ export class Game implements TickListener {
 
             if (this.ground) this.ground.paused = true;
         } else {
+            if (this.isSoundOn && this.bgMusic && this.bgMusic.paused) {
+                this.bgMusic.play().catch(() => {});
+            }
+
             this.isInSettingsSubmenu = false;
             this.btnResume?.hide();
             this.btnSettings?.hide();
@@ -294,19 +394,54 @@ export class Game implements TickListener {
         const minSpawnY = 50;
         const maxSpawnY = sh - this.groundHeight - 80;
         const spawnY = minSpawnY + Math.random() * (maxSpawnY - minSpawnY);
+        this.lastCoinSpawnY = spawnY;
 
         const count = 3;
         const distanceBetween = 60;
 
         for (let i = 0; i < count; i++) {
             const coinX = sw + (i * distanceBetween);
-            const coin = new Coin("/assets/coin.png", coinX, spawnY, this.gameSpeed);
+            const coin = new Coin("/assets/coin.png", coinX, spawnY, this.baseGameSpeed); // Монеты привязаны к базовой, обновление идет внутри них или переопределяется
             coin.show();
 
             this.coins.push(coin);
             Global.scene.add(coin);
         }
     }
+
+    private spawnBoost(): void {
+        const sw = window.innerWidth;
+        const sh = window.innerHeight;
+        const minSpawnY = 50;
+        const maxSpawnY = sh - this.groundHeight - 80;
+        
+        let spawnY = minSpawnY + Math.random() * (maxSpawnY - minSpawnY);
+        
+        // Предотвращение наложения по Y: если буст спавнится слишком близко к монетам, смещаем его
+        if (Math.abs(spawnY - this.lastCoinSpawnY) < 100) {
+            if (spawnY + 120 <= maxSpawnY) {
+                spawnY += 120;
+            } else if (spawnY - 120 >= minSpawnY) {
+                spawnY -= 120;
+            }
+        }
+
+        const types = [BoostType.MAGNET, BoostType.INVINCIBILITY, BoostType.SPEED];
+        const randomType = types[Math.floor(Math.random() * types.length)]!;
+        
+        let textureSrc = "/assets/boost.png";
+        if (randomType === BoostType.INVINCIBILITY) textureSrc = "/assets/boost-2.png";
+        if (randomType === BoostType.SPEED) textureSrc = "/assets/boost-3.png";
+
+        // Смещение по X вперед относительно группы монет (sw + 250), чтобы исключить наложение визуально
+        const boostX = sw + 250; 
+        const boost = new Boost(textureSrc, boostX, spawnY, this.baseGameSpeed, randomType);
+        boost.show();
+        
+        this.boosts.push(boost);
+        Global.scene.add(boost.texture);
+    }
+
     private spawnObstacle(): void {
         const sw = window.innerWidth;
         const sh = window.innerHeight;
@@ -314,11 +449,12 @@ export class Game implements TickListener {
         const maxSpawnY = sh - this.groundHeight - 90;
         const spawnY = minSpawnY + Math.random() * (maxSpawnY - minSpawnY);
         const randomObstacleTexture = this.getRandomTexture(this.obstacleTextures);
-        const obstacle = new Obstacle(randomObstacleTexture, sw + 100, spawnY, this.gameSpeed);
+        const obstacle = new Obstacle(randomObstacleTexture, sw + 100, spawnY, this.baseGameSpeed);
         obstacle.show();
         this.obstacles.push(obstacle);
         Global.scene.add(obstacle);
     }
+
     private checkCollisions(): void {
         if (!this.hero || this.isDead || this.isGameOver) return;
         const heroBounds = {
@@ -327,6 +463,32 @@ export class Game implements TickListener {
             width: this.hero.scaleWidth || 60,
             height: this.hero.height
         };
+
+        // Обработка столкновений с бустами
+        for (let i = this.boosts.length - 1; i >= 0; i--) {
+            const boost = this.boosts[i];
+            if (!boost) continue;
+            const boostBounds = boost.getBounds();
+            const isCollidingWithBoost =
+                heroBounds.x < boostBounds.x + boostBounds.width &&
+                heroBounds.x + heroBounds.width > boostBounds.x &&
+                heroBounds.y < boostBounds.y + boostBounds.height &&
+                heroBounds.y + heroBounds.height > boostBounds.y;
+
+            if (isCollidingWithBoost) {
+                this.activeBoosts[boost.type] = this.boostDuration;
+                Global.scene.remove(boost.texture);
+                this.boosts.splice(i, 1);
+                continue;
+            }
+
+            if (boost.x + boostBounds.width < 0) {
+                Global.scene.remove(boost.texture);
+                this.boosts.splice(i, 1);
+            }
+        }
+
+        // Обработка столкновений с монетами
         for (let i = this.coins.length - 1; i >= 0; i--) {
             const coin = this.coins[i];
             if (!coin) continue;
@@ -347,6 +509,8 @@ export class Game implements TickListener {
                 this.coins.splice(i, 1);
             }
         }
+
+        // Обработка столкновений с препятствиями
         for (let i = this.obstacles.length - 1; i >= 0; i--) {
             const obs = this.obstacles[i];
             if (!obs) continue;
@@ -357,8 +521,14 @@ export class Game implements TickListener {
                 heroBounds.y < obsBounds.y + obsBounds.height &&
                 heroBounds.y + heroBounds.height > obsBounds.y;
             if (isCollidingWithObstacle) {
-                this.triggerDeath();
-                break;
+                if (this.activeBoosts[BoostType.INVINCIBILITY] > 0) {
+                    // Если активна неуязвимость, ломаем препятствие
+                    Global.scene.remove(obs);
+                    this.obstacles.splice(i, 1);
+                } else {
+                    this.triggerDeath();
+                    break;
+                }
             }
             if (obs.x + obsBounds.width < 0) {
                 Global.scene.remove(obs);
@@ -366,6 +536,7 @@ export class Game implements TickListener {
             }
         }
     }
+
     private triggerDeath(): void {
         this.isDead = true;
         this.flashAlpha = 1.0;
@@ -373,6 +544,13 @@ export class Game implements TickListener {
         if (this.ground) this.ground.paused = true;
         for (const coin of this.coins) coin.paused = true;
         for (const obs of this.obstacles) obs.paused = true;
+        for (const boost of this.boosts) boost.paused = true;
+        
+        // Сбрасываем активные бусты при смерти
+        this.activeBoosts[BoostType.MAGNET] = 0;
+        this.activeBoosts[BoostType.INVINCIBILITY] = 0;
+        this.activeBoosts[BoostType.SPEED] = 0;
+
         this.btnUp?.hide();
         this.btnDown?.hide();
         this.btnPause?.hide();
@@ -381,14 +559,23 @@ export class Game implements TickListener {
             this.hero.gravity = 900;
         }
     }
+
     private resetGame(): void {
         for (const coin of this.coins) Global.scene.remove(coin);
         this.coins = [];
         for (const obs of this.obstacles) Global.scene.remove(obs);
         this.obstacles = [];
+        for (const boost of this.boosts) Global.scene.remove(boost.texture);
+        this.boosts = [];
+        
+        this.activeBoosts[BoostType.MAGNET] = 0;
+        this.activeBoosts[BoostType.INVINCIBILITY] = 0;
+        this.activeBoosts[BoostType.SPEED] = 0;
+
         this.score = 0;
         this.coinSpawnTimer = 0;
         this.obstacleSpawnTimer = 0;
+        this.boostSpawnTimer = 0;
         this.isDead = false;
         this.isGameOver = false;
         this.flashAlpha = 0;
@@ -406,6 +593,7 @@ export class Game implements TickListener {
         this.btnDown?.show();
         this.btnPause?.show();
     }
+
     private hookScoreRenderer(): void {
         const dummyUi = {
             x: 0,
@@ -425,23 +613,48 @@ export class Game implements TickListener {
             hide: () => {},
             draw: (ctx: CanvasRenderingContext2D) => {
                 ctx.save();
-                // Отрисовка текста поверх плашки StaticTexture
                 ctx.lineJoin = "round";
                 ctx.fillStyle = "#ffffff";
                 ctx.strokeStyle = "#000000";
                 ctx.lineWidth = 4;
                 ctx.font = "bold 28px sans-serif";
                 ctx.textAlign = "right";
-                const scoreText = `Монеты: ${
-                    this.score
-                }`;
-                // Выравниваем по правому краю, отнимая отступ
+                
+                const scoreText = `Монеты: ${this.score}`;
                 ctx.strokeText(scoreText, ctx.canvas.width - 35, 48);
                 ctx.fillText(scoreText, ctx.canvas.width - 35, 48);
+
+                // Отрисовка таймеров активных бустов на UI
+                ctx.textAlign = "left";
+                ctx.font = "bold 18px sans-serif";
+                let uiOffsetY = 40;
+
+                if (this.activeBoosts[BoostType.MAGNET] > 0) {
+                    const text = `🧲 Магнит: ${this.activeBoosts[BoostType.MAGNET].toFixed(1)}с`;
+                    ctx.strokeStyle = "#000000";
+                    ctx.fillStyle = "#33ccff";
+                    ctx.strokeText(text, 20, uiOffsetY);
+                    ctx.fillText(text, 20, uiOffsetY);
+                    uiOffsetY += 25;
+                }
+                if (this.activeBoosts[BoostType.INVINCIBILITY] > 0) {
+                    const text = `🛡️ Щит: ${this.activeBoosts[BoostType.INVINCIBILITY].toFixed(1)}с`;
+                    ctx.strokeStyle = "#000000";
+                    ctx.fillStyle = "#ffcc00";
+                    ctx.strokeText(text, 20, uiOffsetY);
+                    ctx.fillText(text, 20, uiOffsetY);
+                    uiOffsetY += 25;
+                }
+                if (this.activeBoosts[BoostType.SPEED] > 0) {
+                    const text = `⚡ Ускорение: ${this.activeBoosts[BoostType.SPEED].toFixed(1)}с`;
+                    ctx.strokeStyle = "#000000";
+                    ctx.fillStyle = "#ff3333";
+                    ctx.strokeText(text, 20, uiOffsetY);
+                    ctx.fillText(text, 20, uiOffsetY);
+                }
+
                 if (this.flashAlpha > 0) {
-                    ctx.fillStyle = `rgba(255, 255, 255, ${
-                        this.flashAlpha
-                    })`;
+                    ctx.fillStyle = `rgba(255, 255, 255, ${this.flashAlpha})`;
                     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
                 }
                 if (this.isGameOver) {
@@ -468,6 +681,7 @@ export class Game implements TickListener {
         };
         Global.scene.add(dummyUi);
     }
+
     public invoke(delta: number): void {
         if (this.flashAlpha > 0) {
             this.flashAlpha -= delta * 4;
@@ -525,26 +739,45 @@ export class Game implements TickListener {
         if (this.isPaused) {
             return;
         }
-        // Привязываем x-координату плашки к правому краю экрана в каждом кадре
+
+        // Обновление таймеров бустов
+        if (this.activeBoosts[BoostType.MAGNET] > 0) this.activeBoosts[BoostType.MAGNET] -= delta;
+        if (this.activeBoosts[BoostType.INVINCIBILITY] > 0) this.activeBoosts[BoostType.INVINCIBILITY] -= delta;
+        if (this.activeBoosts[BoostType.SPEED] > 0) this.activeBoosts[BoostType.SPEED] -= delta;
+
+        // Синхронизация скорости скроллинга земли
+        if (this.ground) {
+            this.ground.speed = this.gameSpeed;
+        }
+
         if (this.coinBg && this.coinBg.isLoaded) {
             this.coinBg.show();
-            // Если у вашей картинки фиксированная ширина (например, 200px),
-            // используем её для расчета точного отступа:
             const width = this.coinBg.scaleWidth || 200;
             this.coinBg.x = window.innerWidth - width;
             this.coinBg.y = 0;
         }
+
+        // Таймеры спавна объектов
         this.coinSpawnTimer += delta;
         if (this.coinSpawnTimer >= this.coinSpawnInterval) {
             this.coinSpawnTimer = 0;
             this.spawnCoinGroup();
         }
+
+        this.boostSpawnTimer += delta;
+        if (this.boostSpawnTimer >= this.boostSpawnInterval) {
+            this.boostSpawnTimer = 0;
+            this.spawnBoost();
+        }
+
         this.obstacleSpawnTimer += delta;
         if (this.obstacleSpawnTimer >= this.obstacleSpawnInterval) {
             this.obstacleSpawnTimer = 0;
             this.spawnObstacle();
         }
+
         this.checkCollisions();
+
         const sw = window.innerWidth;
         if (this.bg != null) {
             const bgSpeed = (this.gameSpeed / 8) * delta;
@@ -569,6 +802,50 @@ export class Game implements TickListener {
                 this.rocks.texture.src = this.getRandomTexture(this.rockTextures);
             }
         }
+
+        // Обновление и перемещение бустов
+        for (const boost of this.boosts) {
+            boost.update(delta, this.gameSpeed);
+        }
+
+        // Обновление монет с учетом логики магнита
+        if (this.hero) {
+            const hx = this.hero.x + (this.hero.scaleWidth || 60) / 2;
+            const hy = this.hero.y + this.hero.height / 2;
+            const isMagnetActive = this.activeBoosts[BoostType.MAGNET] > 0;
+
+            for (const coin of this.coins) {
+                if (coin.paused) continue;
+
+                if (isMagnetActive) {
+                    const cx = coin.x + 15; // Примерный центр монеты
+                    const cy = coin.y + 15;
+                    const distX = hx - cx;
+                    const distY = hy - cy;
+                    const distance = Math.sqrt(distX * distX + distY * distY);
+
+                    // Если монета в радиусе действия магнита
+                    if (distance < 300) {
+                        const magnetForce = 400; // Скорость притягивания
+                        coin.x += (distX / distance) * magnetForce * delta;
+                        coin.y += (distY / distance) * magnetForce * delta;
+                        // Компенсируем базовое движение монеты назад, чтобы притягивание работало корректно
+                        continue; 
+                    }
+                }
+                
+                // Стандартное перемещение монеты, если магнит не действует или монета далеко
+                coin.x -= this.gameSpeed * delta;
+            }
+        }
+
+        // Перемещение препятствий с учетом динамической скорости
+        for (const obs of this.obstacles) {
+            if (!obs.paused) {
+                obs.x -= this.gameSpeed * delta;
+            }
+        }
+
         if (this.hero != null) {
             this.hero.speedY = 0;
             if (InputManager.isPressed(GameAction.UP)) {
@@ -590,7 +867,8 @@ export class Game implements TickListener {
             this.hero.update(delta);
         }
     }
-    private handleResize(): void {
+
+    public handleResize(): void {
         const sw = window.innerWidth;
         const sh = window.innerHeight;
         if (this.btnUp && this.btnDown && this.btnPause) {
@@ -603,14 +881,24 @@ export class Game implements TickListener {
         }
         this.updateMenuButtonsPositions();
     }
+
     public dispose(): void {
         window.removeEventListener('resize', this.handleResize.bind(this));
         window.removeEventListener("mousedown", this.onGameOverClickRef);
         window.removeEventListener("touchstart", this.onGameOverClickRef);
+        
+        if (this.bgMusic) {
+            this.bgMusic.pause();
+            this.bgMusic = null;
+        }
+
         for (const coin of this.coins) Global.scene.remove(coin);
         this.coins = [];
         for (const obs of this.obstacles) Global.scene.remove(obs);
         this.obstacles = [];
+        for (const boost of this.boosts) Global.scene.remove(boost.texture);
+        this.boosts = [];
+
         if (this.bg) Global.scene.remove(this.bg);
         if (this.clouds) Global.scene.remove(this.clouds);
         if (this.rocks) Global.scene.remove(this.rocks);
@@ -624,6 +912,7 @@ export class Game implements TickListener {
         if (this.btnBack) Global.scene.remove(this.btnBack);
         if (this.btnSound) Global.scene.remove(this.btnSound);
         if (this.coinBg) Global.scene.remove(this.coinBg);
+
         this.bg = null;
         this.clouds = null;
         this.rocks = null;
